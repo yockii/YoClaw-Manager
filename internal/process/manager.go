@@ -228,13 +228,13 @@ func (pm *ProcessManager) isYoClawProcessName(name string) bool {
 }
 
 func (pm *ProcessManager) GetStatus() (*InstanceStatus, error) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-
 	execPath, err := pm.FindExecutable()
 	if err != nil {
 		return nil, err
 	}
+
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
 
 	status := &InstanceStatus{
 		Executable: execPath,
@@ -256,13 +256,13 @@ func (pm *ProcessManager) GetStatus() (*InstanceStatus, error) {
 }
 
 func (pm *ProcessManager) Start(autoStarted bool) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
 	execPath, err := pm.FindExecutable()
 	if err != nil {
 		return err
 	}
+
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
 
 	if pm.cmd != nil && pm.cmd.Process != nil {
 		if pm.isProcessRunning(pm.cmd.Process) {
