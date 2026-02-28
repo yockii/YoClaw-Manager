@@ -581,6 +581,50 @@
             font-weight: bold;
             color: #4CAF50;
         }
+        .instance-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .instance-controls button {
+            padding: 12px 24px;
+            font-size: 14px;
+        }
+        .instance-controls button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .instance-controls button:not(:disabled):hover {
+            opacity: 0.9;
+        }
+        .instance-info {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .instance-info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #333;
+        }
+        .instance-info-item:last-child {
+            border-bottom: none;
+        }
+        .instance-info-label {
+            color: #aaa;
+        }
+        .instance-info-value {
+            font-weight: bold;
+        }
+        .instance-info-value.running {
+            color: #4CAF50;
+        }
+        .instance-info-value.stopped {
+            color: #f44336;
+        }
         .auth-error {
             position: fixed;
             top: 0;
@@ -641,6 +685,7 @@
         
         <div class="nav">
             <button class="active" data-tab="chat">聊天</button>
+            <button data-tab="instance">实例</button>
             <button data-tab="sessions">会话</button>
             <button data-tab="tasks">任务</button>
             <button data-tab="cron">定时任务</button>
@@ -654,6 +699,21 @@
                     <input type="text" id="messageInput" placeholder="输入消息...">
                     <button id="sendButton" onclick="sendMessage()">发送</button>
                 </div>
+            </div>
+        </div>
+
+        <div id="instance" class="content">
+            <h2>YoClaw 实例管理</h2>
+            <div id="instanceStatus" class="status-indicator">
+                <div class="dot"></div>
+                <span id="instanceStatusText">加载中...</span>
+            </div>
+            <div class="instance-info" id="instanceInfo"></div>
+            <div class="instance-controls">
+                <button onclick="startInstance()" id="startBtn" disabled>启动</button>
+                <button onclick="stopInstance()" id="stopBtn" disabled>停止</button>
+                <button onclick="restartInstance()" id="restartBtn" disabled>重启</button>
+                <button onclick="loadInstanceStatus()" id="refreshBtn">刷新状态</button>
             </div>
         </div>
 
@@ -755,6 +815,7 @@
     </div>
 
     <script src="js/config.js"></script>
+    <script src="js/instance.js"></script>
     <script src="js/main.js"></script>
     <script src="js/cron.js"></script>
     <script src="js/tasks.js"></script>

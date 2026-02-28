@@ -5,6 +5,7 @@
 ## 功能特性
 
 - 💬 实时聊天界面
+- 🖥️ YoClaw实例管理（启动/停止/重启）
 - 📋 会话管理
 - 📝 任务管理
 - ⏰ 定时任务管理
@@ -103,7 +104,76 @@ GET /api/sessions/:id
 DELETE /api/sessions/:id
 ```
 
-#### 2. 任务管理
+#### 2. 实例管理
+
+**获取实例状态**
+
+```bash
+GET /api/instance
+```
+
+**响应：**
+
+```json
+{
+    "status": {
+        "running": true,
+        "pid": 12345,
+        "executable": "/path/to/yoclaw",
+        "config_path": "~/.yoClaw/config.json",
+        "start_time": "2024-01-01T00:00:00Z",
+        "uptime": "1h30m",
+        "auto_started": false
+    }
+}
+```
+
+**启动实例**
+
+```bash
+POST /api/instance?action=start
+```
+
+**响应：**
+
+```json
+{
+    "success": true,
+    "message": "Instance started successfully"
+}
+```
+
+**停止实例**
+
+```bash
+POST /api/instance?action=stop
+```
+
+**响应：**
+
+```json
+{
+    "success": true,
+    "message": "Instance stopped successfully"
+}
+```
+
+**重启实例**
+
+```bash
+POST /api/instance?action=restart
+```
+
+**响应：**
+
+```json
+{
+    "success": true,
+    "message": "Instance restarted successfully"
+}
+```
+
+#### 3. 任务管理
 
 **获取任务列表**
 
@@ -153,7 +223,7 @@ Content-Type: application/json
 DELETE /api/tasks/:id
 ```
 
-#### 3. 定时任务管理
+#### 4. 定时任务管理
 
 **获取定时任务列表**
 
@@ -207,7 +277,7 @@ Content-Type: application/json
 DELETE /api/cron/:id
 ```
 
-#### 4. 配置管理
+#### 5. 配置管理
 
 **获取配置**
 

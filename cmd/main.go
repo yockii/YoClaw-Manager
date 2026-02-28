@@ -12,16 +12,18 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/yockii/yoclaw-manager/internal/config"
+	"github.com/yockii/yoclaw-manager/internal/process"
 )
 
 type Server struct {
-	server     *http.Server
-	upgrader   websocket.Upgrader
-	clients    map[string]*websocket.Conn
-	clientsMu  sync.RWMutex
-	yoclawPath string
-	cfg        *config.Config
-	cfgMu      sync.RWMutex
+	server         *http.Server
+	upgrader       websocket.Upgrader
+	clients        map[string]*websocket.Conn
+	clientsMu      sync.RWMutex
+	yoclawPath     string
+	cfg            *config.Config
+	cfgMu          sync.RWMutex
+	processManager *process.ProcessManager
 }
 
 func NewServer(cfg *config.Config, yoclawPath string) (*Server, error) {
@@ -36,9 +38,10 @@ func NewServer(cfg *config.Config, yoclawPath string) (*Server, error) {
 				return true
 			},
 		},
-		clients:    make(map[string]*websocket.Conn),
-		yoclawPath: yoclawPath,
-		cfg:        cfg,
+		clients:        make(map[string]*websocket.Conn),
+		yoclawPath:     yoclawPath,
+		cfg:            cfg,
+		processManager: process.NewProcessManager(yoclawPath),
 	}
 
 	mux := http.NewServeMux()
@@ -290,6 +293,8 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleCron(w, r)
 	case "config":
 		s.handleConfig(w, r)
+	case "instance":
+		s.handleInstance(w, r)
 	default:
 		http.Error(w, "Not found", http.StatusNotFound)
 	}
@@ -693,6 +698,83 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleInstance(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		s.getInstanceStatus(w, r)
+	case "POST":
+		action := r.URL.Query().Get("action")
+		switch action {
+		case "start":
+			s.startInstance(w, r)
+		case "stop":
+			s.stopInstance(w, r)
+		case "restart":
+			s.restartInstance(w, r)
+		default:
+			http.Error(w, "Invalid action", http.StatusBadRequest)
+		}
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) getInstanceStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := s.processManager.GetStatus()
+	if err != nil {
+		slog.Error("Failed to get instance status", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status": status,
+	})
+}
+
+func (s *Server) startInstance(w http.ResponseWriter, r *http.Request) {
+	if err := s.processManager.Start(false); err != nil {
+		slog.Error("Failed to start instance", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Instance started successfully",
+	})
+}
+
+func (s *Server) stopInstance(w http.ResponseWriter, r *http.Request) {
+	if err := s.processManager.Stop(); err != nil {
+		slog.Error("Failed to stop instance", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Instance stopped successfully",
+	})
+}
+
+func (s *Server) restartInstance(w http.ResponseWriter, r *http.Request) {
+	if err := s.processManager.Restart(); err != nil {
+		slog.Error("Failed to restart instance", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Instance restarted successfully",
+	})
+}
+
 func main() {
 	yoclawPath := "~/.yoClaw/config.json"
 	if len(os.Args) > 1 {
@@ -709,6 +791,10 @@ func main() {
 	if err != nil {
 		slog.Error("Failed to create server", "error", err)
 		os.Exit(1)
+	}
+
+	if err := server.processManager.AutoStartIfNotRunning(); err != nil {
+		slog.Warn("Failed to auto-start YoClaw instance", "error", err)
 	}
 
 	if err := server.Start(); err != nil {
