@@ -17,9 +17,6 @@ jobs:
       matrix:
         os: [windows, linux, darwin]
         arch: [amd64, arm64]
-        exclude:
-          - os: windows
-            arch: arm64
 
     steps:
       - name: Checkout code
@@ -68,14 +65,17 @@ jobs:
         with:
           path: artifacts
 
-      - name: List artifacts
-        run: ls -la artifacts
+      - name: Display structure of downloaded files
+        run: |
+          echo "Downloaded artifacts:"
+          find artifacts -type f -name "*.zip"
 
       - name: Create GitHub Release
-        run: |
-          gh release create ${{ github.ref_name }} \
-            --title "Release ${{ github.ref_name }}" \
-            --generate-notes \
-            artifacts/**/*.zip
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
