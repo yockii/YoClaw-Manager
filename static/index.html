@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YoClaw Web Admin</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 24px;
+            color: #4CAF50;
+        }
+        .status-indicators {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            background: #333;
+        }
+        .status-indicator .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        .status-indicator.connected .dot {
+            background: #4CAF50;
+        }
+        .status-indicator.disconnected .dot {
+            background: #f44336;
+        }
+        .status-indicator.connecting .dot {
+            background: #ff9800;
+        }
+        .nav {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .nav button {
+            padding: 10px 20px;
+            background: #333;
+            color: #e0e0e0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .nav button.active {
+            background: #4CAF50;
+        }
+        .nav button:hover {
+            background: #555;
+        }
+        .content {
+            display: none;
+        }
+        .content.active {
+            display: block;
+        }
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 600px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+        .message.user {
+            background: #4CAF50;
+            margin-left: auto;
+        }
+        .message.assistant {
+            background: #333;
+        }
+        .message-content {
+            word-wrap: break-word;
+        }
+        .message-content h1,
+        .message-content h2,
+        .message-content h3,
+        .message-content h4,
+        .message-content h5,
+        .message-content h6 {
+            margin: 10px 0 5px 0;
+            font-weight: bold;
+        }
+        .message-content h1 { font-size: 1.5em; }
+        .message-content h2 { font-size: 1.3em; }
+        .message-content h3 { font-size: 1.1em; }
+        .message-content p {
+            margin: 8px 0;
+            line-height: 1.5;
+        }
+        .message-content ul,
+        .message-content ol {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+        .message-content li {
+            margin: 4px 0;
+        }
+        .message-content code {
+            background: #444;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        .message-content pre {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .message-content pre code {
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+        .message-content blockquote {
+            border-left: 3px solid #4CAF50;
+            padding-left: 10px;
+            margin: 10px 0;
+            color: #aaa;
+        }
+        .message-content a {
+            color: #4CAF50;
+            text-decoration: underline;
+        }
+        .message-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 10px 0;
+        }
+        .message-content th,
+        .message-content td {
+            border: 1px solid #444;
+            padding: 8px;
+            text-align: left;
+        }
+        .message-content th {
+            background: #444;
+        }
+        .message-content hr {
+            border: none;
+            border-top: 1px solid #444;
+            margin: 15px 0;
+        }
+        .chat-input {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #333;
+        }
+        .chat-input input {
+            flex: 1;
+            padding: 10px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #e0e0e0;
+            border-radius: 4px;
+        }
+        .chat-input button {
+            margin-left: 10px;
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .chat-input input:disabled,
+        .chat-input button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: #666;
+        }
+        .status {
+            padding: 10px;
+            margin-bottom: 20px;
+            background: #333;
+            border-radius: 4px;
+        }
+        .status.connected {
+            background: #4CAF50;
+        }
+        .status.disconnected {
+            background: #f44336;
+        }
+        .config-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .config-tab {
+            padding: 10px 20px;
+            background: #333;
+            color: #e0e0e0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .config-tab.active {
+            background: #4CAF50;
+        }
+        .config-tab:hover {
+            background: #555;
+        }
+        .config-content {
+            display: none;
+        }
+        .config-content.active {
+            display: block;
+        }
+        .config-subtabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .config-subtab {
+            padding: 8px 16px;
+            background: #333;
+            color: #e0e0e0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .config-subtab.active {
+            background: #4CAF50;
+        }
+        .config-subtab:hover {
+            background: #555;
+        }
+        .channel-content {
+            display: none;
+        }
+        .channel-content.active {
+            display: block;
+        }
+        .config-form {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #e0e0e0;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #e0e0e0;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        .config-actions {
+            margin-top: 20px;
+        }
+        .config-actions button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .config-actions button:hover {
+            background: #45a049;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        .agent-item,
+        .provider-item {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .agent-item h4,
+        .provider-item h4 {
+            margin-bottom: 10px;
+            color: #4CAF50;
+        }
+        .delete-btn {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .cron-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .cron-controls .form-group {
+            margin: 0;
+        }
+        .cron-controls select {
+            min-width: 200px;
+        }
+        .cron-item {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .cron-item h4 {
+            margin-bottom: 10px;
+            color: #4CAF50;
+        }
+        .cron-item .cron-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .cron-item .cron-info-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .cron-item .cron-info-label {
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 2px;
+        }
+        .cron-item .cron-info-value {
+            font-size: 14px;
+        }
+        .cron-item .cron-status {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .cron-status.running {
+            background: #4CAF50;
+            color: white;
+        }
+        .cron-status.paused {
+            background: #ff9800;
+            color: white;
+        }
+        .cron-status.stopped {
+            background: #f44336;
+            color: white;
+        }
+        .tasks-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .tasks-controls .form-group {
+            margin: 0;
+        }
+        .tasks-controls select {
+            min-width: 200px;
+        }
+        .task-item {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .task-item h4 {
+            margin-bottom: 10px;
+            color: #4CAF50;
+        }
+        .task-item .task-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .task-item .task-info-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .task-item .task-info-label {
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 2px;
+        }
+        .task-item .task-info-value {
+            font-size: 14px;
+        }
+        .task-item .task-status {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .task-status.pending {
+            background: #ff9800;
+            color: white;
+        }
+        .task-status.running {
+            background: #2196F3;
+            color: white;
+        }
+        .task-status.completed {
+            background: #4CAF50;
+            color: white;
+        }
+        .task-status.failed {
+            background: #f44336;
+            color: white;
+        }
+        .task-status.cancelled {
+            background: #9e9e9e;
+            color: white;
+        }
+        .task-status.remove {
+            background: #616161;
+            color: white;
+        }
+        .task-history {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #333;
+        }
+        .task-history h5 {
+            margin-bottom: 10px;
+            color: #bbb;
+        }
+        .task-history-item {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        .task-history-item .history-role {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .task-history-item .history-content {
+            margin-bottom: 5px;
+            line-height: 1.4;
+        }
+        .task-history-item .history-time {
+            font-size: 11px;
+            color: #aaa;
+        }
+        .sessions-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .sessions-controls .form-group {
+            margin: 0;
+        }
+        .sessions-controls select {
+            min-width: 200px;
+        }
+        .session-item {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .session-item h4 {
+            margin-bottom: 10px;
+            color: #4CAF50;
+        }
+        .session-channel {
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 10px;
+        }
+        .session-messages {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        .session-message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .session-message.user {
+            background: #333;
+            margin-left: 20px;
+        }
+        .session-message.assistant {
+            background: #1a1a1a;
+            margin-right: 20px;
+        }
+        .session-message .message-role {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .session-message .message-content {
+            margin-bottom: 5px;
+            line-height: 1.4;
+        }
+        .session-message .message-time {
+            font-size: 11px;
+            color: #aaa;
+        }
+        .session-message .tool-calls {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #444;
+        }
+        .session-message .tool-call {
+            margin-top: 5px;
+            font-size: 13px;
+        }
+        .session-message .tool-call-name {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .auth-error {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .auth-error-container {
+            background: #2a2a2a;
+            padding: 40px;
+            border-radius: 8px;
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+        }
+        .auth-error-container h2 {
+            color: #f44336;
+            margin-bottom: 20px;
+        }
+        .auth-error-container p {
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+        .auth-error-container button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+        .auth-error-container button:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>YoClaw Web Admin</h1>
+            <div class="status-indicators">
+                <div id="wsStatus" class="status-indicator disconnected">
+                    <div class="dot"></div>
+                    <span>服务端: 未连接</span>
+                </div>
+                <div id="yoclawStatus" class="status-indicator disconnected">
+                    <div class="dot"></div>
+                    <span>YoClaw: 未连接</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="nav">
+            <button class="active" data-tab="chat">聊天</button>
+            <button data-tab="sessions">会话</button>
+            <button data-tab="tasks">任务</button>
+            <button data-tab="cron">定时任务</button>
+            <button data-tab="config">配置</button>
+        </div>
+
+        <div id="chat" class="content active">
+            <div class="chat-container">
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input">
+                    <input type="text" id="messageInput" placeholder="输入消息...">
+                    <button id="sendButton" onclick="sendMessage()">发送</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="sessions" class="content">
+            <h2>会话管理</h2>
+            <div class="sessions-controls">
+                <div class="form-group">
+                    <label>选择 Agent</label>
+                    <select id="sessionsAgentSelect"></select>
+                </div>
+                <button onclick="loadSessions()">加载会话</button>
+            </div>
+            <div id="sessionsList"></div>
+        </div>
+
+        <div id="tasks" class="content">
+            <h2>任务管理</h2>
+            <div class="tasks-controls">
+                <div class="form-group">
+                    <label>选择 Agent</label>
+                    <select id="tasksAgentSelect"></select>
+                </div>
+                <button onclick="loadTasks()">加载任务</button>
+            </div>
+            <div id="tasksList"></div>
+        </div>
+
+        <div id="cron" class="content">
+            <h2>定时任务管理</h2>
+            <div class="cron-controls">
+                <div class="form-group">
+                    <label>选择 Agent</label>
+                    <select id="cronAgentSelect"></select>
+                </div>
+                <button onclick="loadCronJobs()">加载定时任务</button>
+            </div>
+            <div id="cronList"></div>
+        </div>
+
+        <div id="config" class="content">
+            <h2>配置管理</h2>
+            <div class="config-tabs">
+                <button class="config-tab active" data-config-tab="agents">Agents</button>
+                <button class="config-tab" data-config-tab="providers">Providers</button>
+                <button class="config-tab" data-config-tab="channels">Channels</button>
+                <button class="config-tab" data-config-tab="skill">Skill</button>
+            </div>
+            
+            <div id="configAgents" class="config-content active">
+                <h3>Agents 配置</h3>
+                <div id="agentsList"></div>
+                <button onclick="addAgent()">添加 Agent</button>
+            </div>
+            
+            <div id="configProviders" class="config-content">
+                <h3>Providers 配置</h3>
+                <div id="providersList"></div>
+                <button onclick="addProvider()">添加 Provider</button>
+            </div>
+            
+            <div id="configChannels" class="config-content">
+                <h3>Channels 配置</h3>
+                <div class="config-subtabs">
+                    <button class="config-subtab active" data-channel-tab="feishu">Feishu</button>
+                    <button class="config-subtab" data-channel-tab="web">Web</button>
+                </div>
+                <div id="channelFeishu" class="channel-content active">
+                    <h4>Feishu 配置</h4>
+                    <div id="feishuConfig"></div>
+                </div>
+                <div id="channelWeb" class="channel-content">
+                    <h4>Web 配置</h4>
+                    <div id="webConfig"></div>
+                </div>
+            </div>
+            
+            <div id="configSkill" class="config-content">
+                <h3>Skill 配置</h3>
+                <div id="skillConfig"></div>
+            </div>
+            
+            <div class="config-actions">
+                <button onclick="saveConfig()">保存配置</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="authError" class="auth-error" style="display: none;">
+        <div class="auth-error-container">
+            <h2>需要授权</h2>
+            <p>请输入token或在URL中添加token参数，例如：<code>http://localhost:8080/?token=123456</code></p>
+            <p>token值可以在配置文件的 <code>channels.web.token</code> 中查看</p>
+            <div class="form-group">
+                <label>输入Token</label>
+                <input type="text" id="tokenInput" placeholder="请输入token...">
+            </div>
+            <button onclick="submitToken()">提交</button>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/cron.js"></script>
+    <script src="js/tasks.js"></script>
+    <script src="js/sessions.js"></script>
+</body>
+</html>
