@@ -35,10 +35,20 @@ type InstanceStatus struct {
 
 func NewProcessManager(configPath string) *ProcessManager {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	absPath := configPath
+	if configPath != "" {
+		if filepath.IsAbs(configPath) {
+			absPath = configPath
+		} else {
+			absPath, _ = filepath.Abs(configPath)
+		}
+	}
+
 	return &ProcessManager{
 		ctx:        ctx,
 		cancel:     cancel,
-		configPath: configPath,
+		configPath: absPath,
 	}
 }
 
@@ -272,7 +282,7 @@ func (pm *ProcessManager) Start(autoStarted bool) error {
 
 	args := []string{}
 	if pm.configPath != "" {
-		args = append(args, "-c", pm.configPath)
+		args = append(args, pm.configPath)
 	}
 
 	pm.cmd = exec.CommandContext(pm.ctx, execPath, args...)
