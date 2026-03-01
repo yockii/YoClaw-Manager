@@ -16,7 +16,8 @@ import (
 )
 
 type Server struct {
-	server         *http.Server
+	servers        map[string]*http.Server
+	serversMu      sync.RWMutex
 	upgrader       websocket.Upgrader
 	clients        map[string]*websocket.Conn
 	clientsMu      sync.RWMutex
@@ -24,14 +25,10 @@ type Server struct {
 	cfg            *config.Config
 	cfgMu          sync.RWMutex
 	processManager *process.ProcessManager
+	webChannels    map[string]config.ChannelConfig
 }
 
 func NewServer(cfg *config.Config, yoclawPath string) (*Server, error) {
-	addr := cfg.Channels.Web.HostAddress
-	if addr == "" {
-		addr = ":8080"
-	}
-
 	s := &Server{
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
@@ -39,9 +36,11 @@ func NewServer(cfg *config.Config, yoclawPath string) (*Server, error) {
 			},
 		},
 		clients:        make(map[string]*websocket.Conn),
+		servers:        make(map[string]*http.Server),
 		yoclawPath:     yoclawPath,
 		cfg:            cfg,
 		processManager: process.NewProcessManager(yoclawPath),
+		webChannels:    make(map[string]config.ChannelConfig),
 	}
 
 	mux := http.NewServeMux()
@@ -50,26 +49,85 @@ func NewServer(cfg *config.Config, yoclawPath string) (*Server, error) {
 	mux.HandleFunc("/api/", s.handleAPI)
 	mux.HandleFunc("/", s.handleStatic)
 
-	s.server = &http.Server{
-		Addr:    addr,
-		Handler: mux,
+	for channelName, channel := range cfg.Channels {
+		if channel.Type == "web" && channel.Enabled {
+			addr := channel.HostAddress
+			if addr == "" {
+				addr = ":8080"
+			}
+			if !strings.HasPrefix(addr, "127.0.0.1:") && !strings.HasPrefix(addr, "localhost:") && !strings.HasPrefix(addr, ":") {
+				slog.Warn("Skipping non-local web channel address", "channel", channelName, "address", addr)
+				continue
+			}
+			s.webChannels[channelName] = channel
+			s.servers[channelName] = &http.Server{
+				Addr:    addr,
+				Handler: mux,
+			}
+			slog.Info("Configured web channel listener", "channel", channelName, "address", addr)
+		}
+	}
+
+	if len(s.servers) == 0 {
+		defaultAddr := ":8080"
+		s.servers["default"] = &http.Server{
+			Addr:    defaultAddr,
+			Handler: mux,
+		}
+		slog.Info("No web channels configured, using default address", "address", defaultAddr)
 	}
 
 	return s, nil
 }
 
 func (s *Server) Start() error {
-	return s.server.ListenAndServe()
+	errChan := make(chan error, len(s.servers))
+	var wg sync.WaitGroup
+
+	for name, server := range s.servers {
+		wg.Add(1)
+		go func(n string, srv *http.Server) {
+			defer wg.Done()
+			slog.Info("Starting server", "channel", n, "address", srv.Addr)
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				slog.Error("Server error", "channel", n, "error", err)
+				errChan <- err
+			}
+		}(name, server)
+	}
+
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	if err := <-errChan; err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Server) Stop() error {
 	slog.Info("YoClaw Manager stopping")
 	s.clientsMu.Lock()
-	defer s.clientsMu.Unlock()
 	for _, conn := range s.clients {
 		conn.Close()
 	}
-	return s.server.Close()
+	s.clientsMu.Unlock()
+
+	s.serversMu.Lock()
+	defer s.serversMu.Unlock()
+	var errs []error
+	for name, server := range s.servers {
+		if err := server.Close(); err != nil {
+			slog.Error("Failed to close server", "channel", name, "error", err)
+			errs = append(errs, err)
+		}
+	}
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	return nil
 }
 
 func (s *Server) handleYoClawWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -317,10 +375,16 @@ func (s *Server) validateToken(token string) bool {
 	s.cfgMu.RLock()
 	defer s.cfgMu.RUnlock()
 
-	if s.cfg.Channels.Web.Token == "" {
+	if len(s.webChannels) == 0 {
 		return true
 	}
-	return token == s.cfg.Channels.Web.Token
+
+	for _, channel := range s.webChannels {
+		if channel.Token == "" || token == channel.Token {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {

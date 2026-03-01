@@ -11,28 +11,94 @@
 - ⏰ 定时任务管理
 - ⚙️ 配置管理
 - 🔌 完整的REST API
+- 🌐 支持多个Web Channel监听
+
+## 更新日志
+
+### v0.1.0 (适配 YoClaw v0.2.0)
+
+**适配 YoClaw v0.2.0 新配置结构：**
+
+- `agents`、`providers`、`channels` 全部改为 `map` 类型，支持自定义命名
+- 支持配置多个 Web Channel，程序会自动监听所有启用的本地 Web Channel 端口
+- Token 验证支持多个 Web Channel 的 token
+- 前端配置页面支持动态添加/删除 Channel
+
+**配置示例：**
+
+```json
+{
+    "agents": {
+        "myAgent": {
+            "workspace": "~/.yoClaw/workspace",
+            "provider": "myProvider",
+            "model": "qwen3-max",
+            "temperature": 0.7
+        }
+    },
+    "providers": {
+        "myProvider": {
+            "type": "openai",
+            "api_key": "sk-your-api-key",
+            "base_url": ""
+        }
+    },
+    "channels": {
+        "webLocal1": {
+            "type": "web",
+            "enabled": true,
+            "agent": "myAgent",
+            "host_address": "localhost:8080",
+            "token": "token1"
+        },
+        "webLocal2": {
+            "type": "web",
+            "enabled": true,
+            "agent": "myAgent",
+            "host_address": "localhost:9090",
+            "token": "token2"
+        },
+        "feishuBot": {
+            "type": "feishu",
+            "enabled": false,
+            "agent": "myAgent",
+            "app_id": "your-app-id",
+            "app_secret": "your-app-secret"
+        }
+    },
+    "skill": {
+        "global_path": "~/.yoClaw/skills",
+        "builtin_path": "./skills"
+    }
+}
+```
+
+**注意事项：**
+- Web Channel 只监听本地地址（`localhost:`、`127.0.0.1:` 或 `:` 开头）
+- 多个 Web Channel 可以使用不同的 token
+- 旧版配置文件需要手动迁移到新结构
 
 ## 快速开始
 
-### 编译
+### 下载
 
-```bash
-go build -o yoclaw-web-admin
-```
+从 [Releases](https://github.com/yockii/yoclaw-manager/releases) 页面下载对应平台的可执行文件。
 
 ### 运行
 
 ```bash
-# 默认配置（监听8080端口，使用默认token）
+# 使用默认配置路径（~/.yoClaw/config.json）
 ./yoclaw-web-admin
 
-# 自定义配置
-./yoclaw-web-admin -addr :9000 -token my-secret-token -yoclaw-path ~/.yoClaw
+# 指定配置文件路径
+./yoclaw-web-admin /path/to/config.json
 ```
 
 ### 访问
 
-打开浏览器访问 `http://localhost:8080?token=my-secret-token`
+打开浏览器访问 `http://localhost:8080?token=your-token`
+
+注意：端口号和 token 取决于配置文件中 Web Channel 的设置。
 
 ## API文档
 
@@ -312,13 +378,20 @@ Content-Type: application/json
 ## 命令行参数
 
 ```
--addr string
-    监听地址（默认: :8080）
--token string
-    认证token（默认: default）
--yoclaw-path string
-    YoClaw数据目录路径（默认: ~/.yoClaw）
+第一个参数（可选）
+    配置文件路径（默认: ~/.yoClaw/config.json）
 ```
+
+示例：
+```bash
+# 使用默认配置路径
+./yoclaw-web-admin
+
+# 指定配置文件路径
+./yoclaw-web-admin /path/to/config.json
+```
+
+监听地址和 token 现在从配置文件的 `channels` 中读取，每个启用的 Web Channel 都会启动一个监听服务。
 
 ## 架构说明
 

@@ -5,56 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 )
-
-type Config struct {
-	Agents    map[string]AgentConfig    `json:"agents"`
-	Providers map[string]ProviderConfig `json:"providers"`
-	Channels  ChannelsConfig            `json:"channels"`
-	Skill     SkillConfig               `json:"skill"`
-	mu        sync.RWMutex
-}
-
-type SkillConfig struct {
-	GlobalPath  string `json:"global_path"`
-	BuiltInPath string `json:"builtin_path"`
-}
-
-type AgentConfig struct {
-	Workspace   string  `json:"workspace"`
-	Provider    string  `json:"provider"`
-	Model       string  `json:"model"`
-	Temperature float64 `json:"temperature"`
-}
-
-type ProviderConfig struct {
-	Type    string `json:"type"`
-	APIKey  string `json:"api_key"`
-	BaseURL string `json:"base_url,omitempty"`
-}
-
-type ChannelsConfig struct {
-	Feishu FeishuConfig `json:"feishu"`
-	Web    WebConfig    `json:"web"`
-}
-
-type ChannelBaseConfig struct {
-	Enabled bool   `json:"enabled"`
-	Agent   string `json:"agent"`
-}
-
-type FeishuConfig struct {
-	ChannelBaseConfig
-	AppID     string `json:"app_id"`
-	AppSecret string `json:"app_secret"`
-}
-
-type WebConfig struct {
-	ChannelBaseConfig
-	HostAddress string `json:"host_address"`
-	Token       string `json:"token"`
-}
 
 func LoadConfig(cfgFilePath string) (*Config, error) {
 	cfgPath := expandPath(cfgFilePath)
