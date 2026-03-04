@@ -114,86 +114,110 @@ function renderChannels() {
     if (!currentConfig.channels) return;
     
     const channelsContainer = $('#configChannels');
-    const channelTabs = channelsContainer.find('.config-subtabs');
-    channelTabs.empty();
+    channelsContainer.empty();
+    
+    const channelTabs = $('<div class="config-subtabs"></div>');
+    channelsContainer.append(channelTabs);
     
     Object.keys(currentConfig.channels).forEach(channelKey => {
         const channel = currentConfig.channels[channelKey];
-        const tabButton = $(`<button class="config-subtab" data-channel-tab="${channelKey}">${channelKey.charAt(0).toUpperCase() + channelKey.slice(1)}</button>`);
+        const tabButton = $(`<button class="config-subtab" data-channel-tab="${channelKey}">${channelKey}</button>`);
         channelTabs.append(tabButton);
         
-        const channelContent = $(`<div id="channel${channelKey.charAt(0).toUpperCase() + channelKey.slice(1)}" class="channel-content">
-            <h4>${channelKey.charAt(0).toUpperCase() + channelKey.slice(1)} 配置</h4>
-            <div id="${channelKey}Config" class="channel-config"></div>
+        const channelContent = $(`<div id="channel${channelKey}" class="channel-content" data-channel-key="${channelKey}">
+            <div class="channel-header">
+                <h4>${channelKey} (${channel.type || 'unknown'})</h4>
+                <button class="delete-btn" onclick="deleteChannel('${channelKey}')">删除</button>
+            </div>
+            <div class="channel-config-form"></div>
         </div>`);
         channelsContainer.append(channelContent);
         
-        // 渲染通道配置
         renderChannelConfig(channelKey, channel);
     });
     
-    // 激活第一个通道
     if (Object.keys(currentConfig.channels).length > 0) {
-        const firstChannel = Object.keys(currentConfig.channels)[0];
         channelTabs.find('.config-subtab').first().addClass('active');
         channelsContainer.find('.channel-content').first().addClass('active');
     }
     
-    // 绑定通道切换事件
-    $('.config-subtab').click(function() {
+    channelsContainer.append('<button onclick="addChannel()" style="margin-top: 15px;">添加 Channel</button>');
+    
+    $('.config-subtab').off('click').on('click', function() {
         $('.config-subtab').removeClass('active');
         $(this).addClass('active');
         
         $('.channel-content').removeClass('active');
-        $(`#channel${$(this).data('channel-tab').charAt(0).toUpperCase() + $(this).data('channel-tab').slice(1)}`).addClass('active');
+        $(`#channel${$(this).data('channel-tab')}`).addClass('active');
     });
 }
 
 function renderChannelConfig(channelKey, channel) {
-    const container = $(`#${channelKey}Config`);
+    const container = $(`#channel${channelKey} .channel-config-form`);
     let html = '<div class="config-form">';
     
-    // 基础配置
+    const channelTypes = ['web', 'feishu'];
     html += `
         <div class="form-group">
+            <label>Type</label>
+            <select class="channel-type" data-channel-key="${channelKey}">
+                ${channelTypes.map(t => `<option value="${t}" ${channel.type === t ? 'selected' : ''}>${t.charAt(0).toUpperCase() + t.slice(1)}</option>`).join('')}
+            </select>
+        </div>
+        <div class="form-group">
             <label>Enabled</label>
-            <select id="${channelKey}-enabled">
+            <select class="channel-enabled">
                 <option value="true" ${channel.enabled ? 'selected' : ''}>是</option>
                 <option value="false" ${!channel.enabled ? 'selected' : ''}>否</option>
             </select>
         </div>
     `;
     
-    // Agent选择（如果通道有agent配置）
-    if (channel.agent !== undefined) {
-        const agentOptions = Object.keys(currentConfig.agents || {}).map(agentKey => 
-            `<option value="${agentKey}" ${channel.agent === agentKey ? 'selected' : ''}>${agentKey}</option>`
-        ).join('');
-        
+    const agentOptions = Object.keys(currentConfig.agents || {}).map(agentKey => 
+        `<option value="${agentKey}" ${channel.agent === agentKey ? 'selected' : ''}>${agentKey}</option>`
+    ).join('');
+    
+    html += `
+        <div class="form-group">
+            <label>Agent</label>
+            <select class="channel-agent">
+                ${agentOptions || '<option value="">无</option>'}
+            </select>
+        </div>
+    `;
+    
+    if (channel.type === 'feishu') {
         html += `
             <div class="form-group">
-                <label>Agent</label>
-                <select id="${channelKey}-agent">
-                    ${agentOptions || '<option value="">无</option>'}
-                </select>
+                <label>App ID</label>
+                <input type="text" class="channel-app-id" value="${channel.app_id || ''}">
+            </div>
+            <div class="form-group">
+                <label>App Secret</label>
+                <input type="text" class="channel-app-secret" value="${channel.app_secret || ''}">
+            </div>
+        `;
+    } else if (channel.type === 'web') {
+        html += `
+            <div class="form-group">
+                <label>Host Address</label>
+                <input type="text" class="channel-host-address" value="${channel.host_address || ''}" placeholder="localhost:8080">
+            </div>
+            <div class="form-group">
+                <label>Token</label>
+                <input type="text" class="channel-token" value="${channel.token || ''}">
             </div>
         `;
     }
     
-    // 其他配置项
-    Object.keys(channel).forEach(key => {
-        if (key !== 'enabled' && key !== 'agent') {
-            html += `
-                <div class="form-group">
-                    <label>${key.charAt(0).toUpperCase() + key.slice(1)}</label>
-                    <input type="text" id="${channelKey}-${key}" value="${channel[key] || ''}">
-                </div>
-            `;
-        }
-    });
-    
     html += '</div>';
     container.html(html);
+    
+    container.find('.channel-type').off('change').on('change', function() {
+        const newType = $(this).val();
+        currentConfig.channels[channelKey].type = newType;
+        renderChannelConfig(channelKey, currentConfig.channels[channelKey]);
+    });
 }
 
 function renderSkill() {
@@ -220,10 +244,7 @@ function saveConfig() {
     const newConfig = {
         agents: {},
         providers: {},
-        channels: {
-            feishu: {},
-            web: {}
-        },
+        channels: {},
         skill: {}
     };
     
@@ -246,19 +267,27 @@ function saveConfig() {
         };
     });
     
-    newConfig.channels.feishu = {
-        enabled: $('#feishu-enabled').val() === 'true',
-        agent: $('#feishu-agent').val(),
-        app_id: $('#feishu-app-id').val(),
-        app_secret: $('#feishu-app-secret').val()
-    };
-    
-    newConfig.channels.web = {
-        enabled: $('#web-enabled').val() === 'true',
-        agent: $('#web-agent').val(),
-        host_address: $('#web-host-address').val(),
-        token: $('#web-token').val()
-    };
+    $('.channel-content').each(function() {
+        const channelKey = $(this).data('channel-key');
+        if (!channelKey) return;
+        
+        const channelType = $(this).find('.channel-type').val();
+        const channelData = {
+            type: channelType,
+            enabled: $(this).find('.channel-enabled').val() === 'true',
+            agent: $(this).find('.channel-agent').val()
+        };
+        
+        if (channelType === 'feishu') {
+            channelData.app_id = $(this).find('.channel-app-id').val();
+            channelData.app_secret = $(this).find('.channel-app-secret').val();
+        } else if (channelType === 'web') {
+            channelData.host_address = $(this).find('.channel-host-address').val();
+            channelData.token = $(this).find('.channel-token').val();
+        }
+        
+        newConfig.channels[channelKey] = channelData;
+    });
     
     newConfig.skill = {
         global_path: $('#skill-global-path').val(),
@@ -326,7 +355,48 @@ function deleteProvider(key) {
     if (!confirm('确定要删除这个 Provider 吗？')) return;
     delete currentConfig.providers[key];
     renderProviders();
-    renderAgents(); // 重新渲染agents，因为provider选择可能需要更新
+    renderAgents();
+}
+
+function addChannel() {
+    const key = prompt('请输入 Channel 名称：');
+    if (!key) return;
+    
+    if (!currentConfig.channels) currentConfig.channels = {};
+    if (currentConfig.channels[key]) {
+        alert('Channel 名称已存在');
+        return;
+    }
+    
+    const type = prompt('请输入 Channel 类型 (web/feishu)：', 'web');
+    if (type !== 'web' && type !== 'feishu') {
+        alert('无效的 Channel 类型');
+        return;
+    }
+    
+    const defaultAgent = Object.keys(currentConfig.agents || {})[0] || '';
+    
+    currentConfig.channels[key] = {
+        type: type,
+        enabled: false,
+        agent: defaultAgent
+    };
+    
+    if (type === 'feishu') {
+        currentConfig.channels[key].app_id = '';
+        currentConfig.channels[key].app_secret = '';
+    } else if (type === 'web') {
+        currentConfig.channels[key].host_address = 'localhost:8080';
+        currentConfig.channels[key].token = '';
+    }
+    
+    renderChannels();
+}
+
+function deleteChannel(key) {
+    if (!confirm('确定要删除这个 Channel 吗？')) return;
+    delete currentConfig.channels[key];
+    renderChannels();
 }
 
 $('.config-tab').click(function() {

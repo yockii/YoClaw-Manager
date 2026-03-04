@@ -16,7 +16,8 @@ import (
 )
 
 type Server struct {
-	server         *http.Server
+	servers        map[string]*http.Server
+	serversMu      sync.RWMutex
 	upgrader       websocket.Upgrader
 	clients        map[string]*websocket.Conn
 	clientsMu      sync.RWMutex
@@ -24,14 +25,10 @@ type Server struct {
 	cfg            *config.Config
 	cfgMu          sync.RWMutex
 	processManager *process.ProcessManager
+	webChannels    map[string]config.ChannelConfig
 }
 
 func NewServer(cfg *config.Config, wangshuPath string) (*Server, error) {
-	addr := cfg.Channels.Web.HostAddress
-	if addr == "" {
-		addr = ":8080"
-	}
-
 	s := &Server{
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
@@ -39,40 +36,101 @@ func NewServer(cfg *config.Config, wangshuPath string) (*Server, error) {
 			},
 		},
 		clients:        make(map[string]*websocket.Conn),
+		servers:        make(map[string]*http.Server),
 		wangshuPath:    wangshuPath,
 		cfg:            cfg,
 		processManager: process.NewProcessManager(wangshuPath),
+		webChannels:    make(map[string]config.ChannelConfig),
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", s.handlewangshuWebSocket)
+	mux.HandleFunc("/ws", s.handleWangshuWebSocket)
 	mux.HandleFunc("/webWs", s.handleWebWebSocket)
 	mux.HandleFunc("/api/", s.handleAPI)
 	mux.HandleFunc("/", s.handleStatic)
 
-	s.server = &http.Server{
-		Addr:    addr,
-		Handler: mux,
+	for channelName, channel := range cfg.Channels {
+		if channel.Type == "web" && channel.Enabled {
+			addr := channel.HostAddress
+			if addr == "" {
+				addr = ":8080"
+			}
+			if !strings.HasPrefix(addr, "127.0.0.1:") && !strings.HasPrefix(addr, "localhost:") && !strings.HasPrefix(addr, ":") {
+				slog.Warn("Skipping non-local web channel address", "channel", channelName, "address", addr)
+				continue
+			}
+			s.webChannels[channelName] = channel
+			s.servers[channelName] = &http.Server{
+				Addr:    addr,
+				Handler: mux,
+			}
+			slog.Info("Configured web channel listener", "channel", channelName, "address", addr)
+		}
+	}
+
+	if len(s.servers) == 0 {
+		defaultAddr := ":8080"
+		s.servers["default"] = &http.Server{
+			Addr:    defaultAddr,
+			Handler: mux,
+		}
+		slog.Info("No web channels configured, using default address", "address", defaultAddr)
 	}
 
 	return s, nil
 }
 
 func (s *Server) Start() error {
-	return s.server.ListenAndServe()
+	errChan := make(chan error, len(s.servers))
+	var wg sync.WaitGroup
+
+	for name, server := range s.servers {
+		wg.Add(1)
+		go func(n string, srv *http.Server) {
+			defer wg.Done()
+			slog.Info("Starting server", "channel", n, "address", srv.Addr)
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				slog.Error("Server error", "channel", n, "error", err)
+				errChan <- err
+			}
+		}(name, server)
+	}
+
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	if err := <-errChan; err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Server) Stop() error {
 	slog.Info("wangshu Manager stopping")
 	s.clientsMu.Lock()
-	defer s.clientsMu.Unlock()
 	for _, conn := range s.clients {
 		conn.Close()
 	}
-	return s.server.Close()
+	s.clientsMu.Unlock()
+
+	s.serversMu.Lock()
+	defer s.serversMu.Unlock()
+	var errs []error
+	for name, server := range s.servers {
+		if err := server.Close(); err != nil {
+			slog.Error("Failed to close server", "channel", name, "error", err)
+			errs = append(errs, err)
+		}
+	}
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	return nil
 }
 
-func (s *Server) handlewangshuWebSocket(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleWangshuWebSocket(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if !s.validateToken(token) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -144,7 +202,6 @@ func (s *Server) handleWebWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("Web client connected", "client", webClientID, "total", len(s.clients))
 
-	// 立即发送wangshu的当前连接状态
 	s.clientsMu.RLock()
 	wangshuConnected := false
 	for clientID := range s.clients {
@@ -201,7 +258,6 @@ func (s *Server) handleWebWebSocket(w http.ResponseWriter, r *http.Request) {
 		broadcastCount := 0
 		webClientCount := 0
 
-		// 创建带有role字段的消息用于广播给其他web客户端
 		broadcastMsg := map[string]interface{}{
 			"type":    msg.Type,
 			"content": msg.Content,
@@ -240,7 +296,6 @@ func (s *Server) broadcastToClients(msg interface{}) {
 
 	webClientCount := 0
 	for clientID, conn := range s.clients {
-		// 只向web客户端发送消息
 		if len(clientID) > 4 && clientID[:4] == "web-" {
 			if err := conn.WriteJSON(msg); err != nil {
 				slog.Error("Failed to broadcast message", "error", err)
@@ -264,7 +319,6 @@ func (s *Server) broadcastWangshuStatus(status string) {
 
 	webClientCount := 0
 	for clientID, conn := range s.clients {
-		// 只向web客户端发送状态消息，不发送给wangshu
 		if len(clientID) > 4 && clientID[:4] == "web-" {
 			if err := conn.WriteJSON(msg); err != nil {
 				slog.Error("Failed to broadcast wangshu status", "error", err)
@@ -317,10 +371,16 @@ func (s *Server) validateToken(token string) bool {
 	s.cfgMu.RLock()
 	defer s.cfgMu.RUnlock()
 
-	if s.cfg.Channels.Web.Token == "" {
+	if len(s.webChannels) == 0 {
 		return true
 	}
-	return token == s.cfg.Channels.Web.Token
+
+	for _, channel := range s.webChannels {
+		if channel.Token == "" || token == channel.Token {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
@@ -406,7 +466,6 @@ func (s *Server) loadSessions(sessionsDir string) ([]Session, error) {
 			}
 
 			chatID := strings.TrimSuffix(sessionFile.Name(), ".jsonl")
-			// 处理web下文件名可能为空的情况
 			if chatID == "" || chatID == channel {
 				chatID = "web"
 			}
