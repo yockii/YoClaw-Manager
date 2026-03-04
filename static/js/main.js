@@ -1,5 +1,5 @@
 let ws = null;
-let yoclawConnected = false;
+let wangshuConnected = false;
 let isConnecting = false;
 const token = new URLSearchParams(window.location.search).get('token') || '';
 
@@ -65,7 +65,7 @@ function connect() {
         const data = JSON.parse(event.data);
         console.log('Received WebSocket message:', data);
         
-        // 处理普通消息（只有content字段且没有role字段的是YoClaw的回复）
+        // 处理普通消息（只有content字段且没有role字段的是望舒的回复）
         if (data.content && !data.role) {
             addMessage(data.content, 'assistant');
         }
@@ -75,18 +75,18 @@ function connect() {
             addMessage(data.content, data.role);
         }
         
-        // 处理 YoClaw 连接状态
-        if (data.type === 'yoclaw_status') {
+        // 处理 wangshu 连接状态
+        if (data.type === 'wangshu_status') {
             if (data.status === 'connected') {
-                $('#yoclawStatus').removeClass('disconnected connecting').addClass('connected');
-                $('#yoclawStatus span').text('YoClaw: 已连接');
-                yoclawConnected = true;
+                $('#wangshuStatus').removeClass('disconnected connecting').addClass('connected');
+                $('#wangshuStatus span').text('望舒: 已连接');
+                wangshuConnected = true;
                 $('#messageInput').prop('disabled', false);
                 $('#sendButton').prop('disabled', false);
             } else {
-                $('#yoclawStatus').removeClass('connected connecting').addClass('disconnected');
-                $('#yoclawStatus span').text('YoClaw: 未连接');
-                yoclawConnected = false;
+                $('#wangshuStatus').removeClass('connected connecting').addClass('disconnected');
+                $('#wangshuStatus span').text('望舒: 未连接');
+                wangshuConnected = false;
                 $('#messageInput').prop('disabled', true);
                 $('#sendButton').prop('disabled', true);
             }
@@ -120,8 +120,8 @@ function sendMessage() {
     const content = $('#messageInput').val().trim();
     if (!content || !ws) return;
 
-    if (!yoclawConnected) {
-        alert('YoClaw 未连接，无法发送消息。请等待 YoClaw 连接后再试。');
+    if (!wangshuConnected) {
+        alert('望舒未连接，无法发送消息。请等待望舒连接后再试。');
         return;
     }
 

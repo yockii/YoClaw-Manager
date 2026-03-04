@@ -92,7 +92,7 @@ function startInstance() {
         return;
     }
 
-    if (!confirm('确定要启动 YoClaw 实例吗？')) {
+    if (!confirm('确定要启动望舒实例吗？')) {
         return;
     }
 
@@ -127,7 +127,7 @@ function stopInstance() {
         return;
     }
 
-    if (!confirm('确定要停止 YoClaw 实例吗？')) {
+    if (!confirm('确定要停止望舒实例吗？')) {
         return;
     }
 
@@ -162,7 +162,7 @@ function restartInstance() {
         return;
     }
 
-    if (!confirm('确定要重启 YoClaw 实例吗？')) {
+    if (!confirm('确定要重启望舒实例吗？')) {
         return;
     }
 
